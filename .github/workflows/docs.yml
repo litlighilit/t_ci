@@ -4,7 +4,7 @@ name: docs
 env:
   nim-version: 'stable'
   devel-branch: master
-  git-url-arg: --git.url:https://github.com/${{ github.repository }} --git.commit:$${{ env.devel-branch }}
+  git-url-arg: --git.url:https://github.com/${{ github.repository }} --git.commit:${{ env.devel-branch }}
   base-deploy-dir: ${{ github.workspace }}/.gh-pages
   lib-deploy-subdir: Lib
   devel-deploy-subdir: devel
