@@ -4,14 +4,14 @@ name: docs
 env:
   nim-version: 'stable'
   devel-branch: master
-  git-url-arg: --git.url:https://github.com/${{ github.repository }} --git.commit:"${{ env.devel-branch }}"
   base-deploy-dir: ${{ github.workspace }}/.gh-pages
   lib-deploy-subdir: Lib
   devel-deploy-subdir: devel
 on:
   push:
     branches:
-      - ${{ env.devel-branch }}
+      - master
+      #${{ env.devel-branch }}
 
 jobs:
   build-docs:
@@ -31,27 +31,30 @@ jobs:
       run: |
         # Define a reusable function for generating documentation
         generate_docs() {
+          local git_url_arg="--git.url:https://github.com/${{ github.repository }} --git.commit:${{ env.devel-branch }}"
           local subdir=$1
           echo "Generating documentation for $subdir"
           rm -rf "${{ env.base-deploy-dir }}/$subdir"
-          local deploy-dir=${{ env.base-deploy-dir }}/$subdir
-          nimble testDoc --index:on --project ${{ env.git-url-arg }} --outdir:$deploy-dir -d:homepage="${{ github.event.repository.homepage }}"
-          nimble testLibDoc ${{ env.git-url-arg }} --outdir:$deploy-dir/${{ env.lib-deploy-subdir }}
+          local deploy_dir=${{ env.base-deploy-dir }}/$subdir
+          nimble testDoc --index:on --project $git_url_arg --outdir:$deploy_dir -d:homepage="${{ github.event.repository.homepage }}"
+          nimble testLibDoc $git_url_arg --outdir:$deploy_dir/${{ env.lib-deploy-subdir }}
           # Copy to index.html
-          cp $deploy-dir/${{ github.event.repository.name }}.html $deploy-dir/index.html
+          cp $deploy_dir/${{ github.event.repository.name }}.html $deploy_dir/index.html
         }
         # List all v* tags in the repository
-        all_tags=$(git tag -l 'v*')
+        all_tags=$(git tag -l 'v*.*'|sort -V)
 
         # List all existing directories in the deploy directory
-        existing_dirs=$(for dir in ${{ env.base-deploy-dir }}/v*; do basename "$dir"; done)
+        existing_dirs=$(for dir in ${{ env.base-deploy-dir }}/v*.*; do basename "$dir"; done | sort -V)
 
-        # Find tags that don't have corresponding directories
         # Find tags that don't have corresponding directories by comparing sorted lists of tags and directories
-        unbuilt_tags=$(comm -23 <(echo "$all_tags" | sort) <(echo "$existing_dirs" | sort))
+        unbuilt_tags=$(comm -23 <(echo "$all_tags") <(echo "$existing_dirs"))
+
+        echo "existing_dirs: $existing_dirs"
+        echo "all_tags: $all_tags"
 
         # Find directories that are not in the list of tags
-        unused_dirs=$(comm -13 <(echo "$all_tags" | sort) <(echo "$existing_dirs" | sort))
+        unused_dirs=$(comm -13 <(echo "$all_tags") <(echo "$existing_dirs"))
 
         # Remove unused directories
         if [ -n "$unused_dirs" ]; then
@@ -88,9 +91,12 @@ jobs:
       if: env.deploy_subdir != ${{ env.devel-deploy-subdir }}
       run: |
         # Create symlink from /stable to lastest version
-        latest_tag=$(ls -d ${{ env.deploy-dir }}/v* 2>/dev/null | sort -V | tail -n 1 | xargs -n 1 basename)
+        cd ${{ env.base-deploy-dir }}
+        latest_tag=$(ls -d v*.* 2>/dev/null | sort -V | tail -n 1)
+        cd -
+        echo "lastest_tag: $latest_tag"
         rm -f ${{ env.base-deploy-dir }}/stable
-        ln -s ${{ env.base-deploy-dir }}/$latest-tag ${{ env.base-deploy-dir }}/stable
+        ln -s `realpath ${{ env.base-deploy-dir }}/$latest-tag` ${{ env.base-deploy-dir }}/stable
 
         # Re-create / items from /stable
         find ${{ env.base-deploy-dir }} -maxdepth 1 -type l -exec rm -f {} \;
@@ -110,4 +116,3 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-
