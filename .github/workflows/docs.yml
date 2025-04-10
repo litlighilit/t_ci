@@ -4,7 +4,7 @@ name: docs
 env:
   nim-version: 'stable'
   devel-branch: master
-  git-url-arg: --git.url:https://github.com/${{ github.repository }} --git.commit:${{ env.devel-branch }}
+  git-url-arg: --git.url:https://github.com/${{ github.repository }} --git.commit:"${{ env.devel-branch }}"
   base-deploy-dir: ${{ github.workspace }}/.gh-pages
   lib-deploy-subdir: Lib
   devel-deploy-subdir: devel
@@ -12,8 +12,6 @@ on:
   push:
     branches:
       - ${{ env.devel-branch }}
-    tags:
-      - 'v*'
 
 jobs:
   build-docs:
@@ -29,28 +27,51 @@ jobs:
     - uses: jiro4989/setup-nim-action@v1
       with:
         nim-version: ${{ env.nim-version }}
-    - name: Set deploy directory
-      id: set-deploy-dir
+    - name: Filter unbuilt tags and remove unused directories
       run: |
-        # $devel-branch branch -> /$devel-deploy-subdir;  v* tag -> /v*
-        if [ "${{ github.ref }}" = "refs/heads/${{ env.devel-branch }}" ]; then
-          echo "deploy_subdir=${{ devel-deploy-subdir }}" >> $GITHUB_ENV
-        elif [ "${{ github.ref }}" = refs/tags/v* ]; then
-          version=${{ github.ref_name }}
-          echo "deploy_subdir=${version}" >> $GITHUB_ENV
-          echo "is_latest_tag=true" >> $GITHUB_ENV
-        else
-          echo "Unsupported ref: ${{ github.ref }}"
-          exit 1
-        fi
-        deploy-dir=${{ env.base-deploy-dir }}/${{ env.deploy_subdir }}
-        echo "deploy-dir=$deploy-dir" >> $GITHUB_ENV
-        echo "lib-depoly-dir=$deploy-dir/${{ env.lib-deploy-subdir }}" >> $GITHUB_ENV
+        # Define a reusable function for generating documentation
+        generate_docs() {
+          local subdir=$1
+          echo "Generating documentation for $subdir"
+          rm -rf "${{ env.base-deploy-dir }}/$subdir"
+          local deploy-dir=${{ env.base-deploy-dir }}/$subdir
+          nimble testDoc --index:on --project ${{ env.git-url-arg }} --outdir:$deploy-dir -d:homepage="${{ github.event.repository.homepage }}"
+          nimble testLibDoc ${{ env.git-url-arg }} --outdir:$deploy-dir/${{ env.lib-deploy-subdir }}
+          # Copy to index.html
+          cp $deploy-dir/${{ github.event.repository.name }}.html $deploy-dir/index.html
+        }
+        # List all v* tags in the repository
+        all_tags=$(git tag -l 'v*')
 
-    - name: Generate Documentation
-      run: nimble testDoc --index:on --project ${{ env.git-url-arg }} --outdir:${{ env.deploy-dir }} -d:homepage="${{ github.event.repository.homepage }}"
-    - name: Generate Library Documentation
-      run: nimble testLibDoc ${{ env.git-url-arg }} --outdir:${{ env.lib-deploy-dir }}
+        # List all existing directories in the deploy directory
+        existing_dirs=$(for dir in ${{ env.base-deploy-dir }}/v*; do basename "$dir"; done)
+
+        # Find tags that don't have corresponding directories
+        # Find tags that don't have corresponding directories by comparing sorted lists of tags and directories
+        unbuilt_tags=$(comm -23 <(echo "$all_tags" | sort) <(echo "$existing_dirs" | sort))
+
+        # Find directories that are not in the list of tags
+        unused_dirs=$(comm -13 <(echo "$all_tags" | sort) <(echo "$existing_dirs" | sort))
+
+        # Remove unused directories
+        if [ -n "$unused_dirs" ]; then
+          echo "Removing unused directories: $unused_dirs"
+          for dir in $unused_dirs; do
+            rm -rf ${{ env.base-deploy-dir }}/$dir
+          done
+        fi
+
+        generate_docs ${{ env.devel-deploy-subdir }}
+        # Generate documentation for unbuilt tags
+        if [ -n "$unbuilt_tags" ]; then
+          echo "Generating documentation for unbuilt tags: $unbuilt_tags"
+          for tag in $unbuilt_tags; do
+            git checkout $tag
+            generate_docs $tag
+          done
+        fi
+        git checkout ${{ env.devel-branch }}
+
     - name: "CNAME"
       run: |
         cname=$(echo ${{ github.event.repository.homepage }} | grep -oP 'https?://\K[^/]+')
@@ -60,26 +81,24 @@ jobs:
         if [ ${cname##$prefix} = $cname ]; then  
             cname="${prefix}${cname}"
         fi
-        echo -n $cname > ${{ env.deploy-dir }}/CNAME
+        # Dynamically generate the CNAME file to configure a custom domain for GitHub Pages.
+        # This ensures the domain matches the repository's homepage URL, allowing proper redirection.
         # We generate CNAME here to use ${{ github.event.repository.homepage }}
-    - name: Copy to index.html
-      run: cp ${{ env.deploy-dir }}/${{ github.event.repository.name }}.html ${{ env.deploy-dir }}/index.html
     - name: Create symlinks for all items in /stable to /
-      if: env.deploy_subdir != ${{ devel-deploy-subdir }}
+      if: env.deploy_subdir != ${{ env.devel-deploy-subdir }}
       run: |
-        # Create symlinks for all items in /stable to /
-        if [ "${{ env.is_latest_tag }}" = "true" ]; then
-          rm -f ${{ env.deploy-dir }}/stable
-          ln -s ${{ env.deploy-dir }} ${{ env.deploy-dir }}/stable
-        fi
+        # Create symlink from /stable to lastest version
+        latest_tag=$(ls -d ${{ env.deploy-dir }}/v* 2>/dev/null | sort -V | tail -n 1 | xargs -n 1 basename)
+        rm -f ${{ env.base-deploy-dir }}/stable
+        ln -s ${{ env.base-deploy-dir }}/$latest-tag ${{ env.base-deploy-dir }}/stable
 
         # Re-create / items from /stable
-        find ${{ env.deploy-dir }} -maxdepth 1 -type l -exec rm -f {} \;
-        find ${{ env.deploy-dir }}/stable -mindepth 1 -maxdepth 1 -exec ln -s {} ${{ env.deploy-dir }}/ \;
+        find ${{ env.base-deploy-dir }} -maxdepth 1 -type l -exec rm -f {} \;
+        find ${{ env.base-deploy-dir }}/stable -mindepth 1 -maxdepth 1 -exec ln -s {} ${{ env.base-deploy-dir }}/ \;
     - name: Upload artifact
       uses: actions/upload-pages-artifact@v3
       with:
-        path: ${{ env.deploy-dir }}
+        path: ${{ env.base-deploy-dir }}
 
   deploy-docs:
     needs: build-docs
@@ -91,3 +110,4 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
