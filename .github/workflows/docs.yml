@@ -1,0 +1,93 @@
+name: docs
+
+# yamllint disable-line rule:truthy
+env:
+  nim-version: 'stable'
+  devel-branch: master
+  git-url-arg: --git.url:https://github.com/${{ github.repository }} --git.commit:$${{ env.devel-branch }}
+  base-deploy-dir: ${{ github.workspace }}/.gh-pages
+  lib-deploy-subdir: Lib
+  devel-deploy-subdir: devel
+on:
+  push:
+    branches:
+      - ${{ env.devel-branch }}
+    tags:
+      - 'v*'
+
+jobs:
+  build-docs:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Cache nimble
+      id: cache-nimble
+      uses: actions/cache@v4
+      with:
+          path: ~/.nimble
+          key: ${{ runner.os }}-nimble
+    - uses: jiro4989/setup-nim-action@v1
+      with:
+        nim-version: ${{ env.nim-version }}
+    - name: Set deploy directory
+      id: set-deploy-dir
+      run: |
+        # $devel-branch branch -> /$devel-deploy-subdir;  v* tag -> /v*
+        if [ "${{ github.ref }}" = "refs/heads/${{ env.devel-branch }}" ]; then
+          echo "deploy_subdir=${{ devel-deploy-subdir }}" >> $GITHUB_ENV
+        elif [ "${{ github.ref }}" = refs/tags/v* ]; then
+          version=${{ github.ref_name }}
+          echo "deploy_subdir=${version}" >> $GITHUB_ENV
+          echo "is_latest_tag=true" >> $GITHUB_ENV
+        else
+          echo "Unsupported ref: ${{ github.ref }}"
+          exit 1
+        fi
+        deploy-dir=${{ env.base-deploy-dir }}/${{ env.deploy_subdir }}
+        echo "deploy-dir=$deploy-dir" >> $GITHUB_ENV
+        echo "lib-depoly-dir=$deploy-dir/${{ env.lib-deploy-subdir }}" >> $GITHUB_ENV
+
+    - name: Generate Documentation
+      run: nimble testDoc --index:on --project ${{ env.git-url-arg }} --outdir:${{ env.deploy-dir }} -d:homepage="${{ github.event.repository.homepage }}"
+    - name: Generate Library Documentation
+      run: nimble testLibDoc ${{ env.git-url-arg }} --outdir:${{ env.lib-deploy-dir }}
+    - name: "CNAME"
+      run: |
+        cname=$(echo ${{ github.event.repository.homepage }} | grep -oP 'https?://\K[^/]+')
+        prefix="docs."
+        # py: if cname.startswith(prefix)
+        # bash: if [[ "${cname}" != $prefix* ]]
+        if [ ${cname##$prefix} = $cname ]; then  
+            cname="${prefix}${cname}"
+        fi
+        echo -n $cname > ${{ env.deploy-dir }}/CNAME
+        # We generate CNAME here to use ${{ github.event.repository.homepage }}
+    - name: Copy to index.html
+      run: cp ${{ env.deploy-dir }}/${{ github.event.repository.name }}.html ${{ env.deploy-dir }}/index.html
+    - name: Create symlinks for all items in /stable to /
+      if: env.deploy_subdir != ${{ devel-deploy-subdir }}
+      run: |
+        # Create symlinks for all items in /stable to /
+        if [ "${{ env.is_latest_tag }}" = "true" ]; then
+          rm -f ${{ env.deploy-dir }}/stable
+          ln -s ${{ env.deploy-dir }} ${{ env.deploy-dir }}/stable
+        fi
+
+        # Re-create / items from /stable
+        find ${{ env.deploy-dir }} -maxdepth 1 -type l -exec rm -f {} \;
+        find ${{ env.deploy-dir }}/stable -mindepth 1 -maxdepth 1 -exec ln -s {} ${{ env.deploy-dir }}/ \;
+    - name: Upload artifact
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: ${{ env.deploy-dir }}
+
+  deploy-docs:
+    needs: build-docs
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

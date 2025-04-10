@@ -1,0 +1,5 @@
+/.vscode/
+nimcache/
+/docs/
+tester*
+/testresults/
