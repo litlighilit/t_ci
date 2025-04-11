@@ -111,13 +111,17 @@ jobs:
         cd ${{ env.base-deploy-dir }}
         latest_tag=$(ls -d v*.* 2>/dev/null | sort -V | tail -n 1)
         cd -
-        echo "lastest_tag: $latest_tag"
-        rm -f ${{ env.base-deploy-dir }}/stable
-        ln -s `realpath ${{ env.base-deploy-dir }}/$latest-tag` ${{ env.base-deploy-dir }}/stable
+        if [ "$latest_tag" = "v*.*" ]; then
+          echo "no release document build found"
+        else
+          echo "lastest_tag: $latest_tag"
+          rm -f ${{ env.base-deploy-dir }}/stable
+          ln -s `realpath ${{ env.base-deploy-dir }}/$latest-tag` ${{ env.base-deploy-dir }}/stable
 
-        # Re-create / items from /stable
-        find ${{ env.base-deploy-dir }} -maxdepth 1 -type l -exec rm -f {} \;
-        find ${{ env.base-deploy-dir }}/stable -mindepth 1 -maxdepth 1 -exec ln -s {} ${{ env.base-deploy-dir }}/ \;
+          # Re-create / items from /stable
+          find ${{ env.base-deploy-dir }} -maxdepth 1 -type l -exec rm -f {} \;
+          find ${{ env.base-deploy-dir }}/stable -mindepth 1 -maxdepth 1 -exec ln -s {} ${{ env.base-deploy-dir }}/ \;
+        fi
     - name: Upload artifact
       uses: actions/upload-pages-artifact@v3
       with:
