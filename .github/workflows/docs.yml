@@ -25,10 +25,13 @@ jobs:
       uses: actions/cache@v4
       with:
           path: ~/.nimble
-          key: ${{ runner.os }}-nimble
-    - uses: jiro4989/setup-nim-action@v1
+          key: ${{ runner.os }}-nimble-v2-${{ hashFiles('*.nimble') }}
+          restore-keys: |
+            ${{ runner.os }}-nimble-v2-
+    - uses: jiro4989/setup-nim-action@v2
       with:
         nim-version: ${{ env.nim-version }}
+        repo-token: ${{ secrets.GITHUB_TOKEN }}
     - name: Filter unbuilt tags and remove unused directories
       run: |
         # Define a reusable function for generating documentation
