@@ -45,13 +45,19 @@ jobs:
           nimble testLibDoc $git_url_arg --outdir:$deploy_dir/${{ env.lib-deploy-subdir }}
           # Copy to index.html
           cp $deploy_dir/${{ github.event.repository.name }}.html $deploy_dir/index.html
+          git log -1 --format=%H > $deploy_dir/COMMIT
         }
         # List all v* tags in the repository
         all_tags=$(git tag -l 'v*.*'|sort -V)
 
         # List all existing directories in the deploy directory
-        existing_dirs=$(for dir in ${{ env.base-deploy-dir }}/v*.*; do basename "$dir"; done | sort -V)
-        [ "$existing_dirs" = "v*.*" ] && existing_dirs=""
+        cd ${{ env.base-deploy-dir }}
+        existing_dirs=$(for dir in v*.*; do
+          if [ -d $dir -a "$(cat $dir/COMMIT 2>/dev/null)" = "$(git rev-list -n 1 $dir)" ];then
+            echo "$dir";
+          fi
+        done | sort -V)
+        cd -
 
         # Find tags that don't have corresponding directories by comparing sorted lists of tags and directories
         unbuilt_tags=$(comm -23 <(echo "$all_tags") <(echo "$existing_dirs"))
