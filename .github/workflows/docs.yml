@@ -51,6 +51,7 @@ jobs:
 
         # List all existing directories in the deploy directory
         existing_dirs=$(for dir in ${{ env.base-deploy-dir }}/v*.*; do basename "$dir"; done | sort -V)
+        [ "$existing_dirs" = "v*.*" ] && existing_dirs=""
 
         # Find tags that don't have corresponding directories by comparing sorted lists of tags and directories
         unbuilt_tags=$(comm -23 <(echo "$all_tags") <(echo "$existing_dirs"))
