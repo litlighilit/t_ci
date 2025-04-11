@@ -75,11 +75,11 @@ jobs:
         if [ -n "$unbuilt_tags" ]; then
           echo "Generating documentation for unbuilt tags: $unbuilt_tags"
           for tag in $unbuilt_tags; do
-            git checkout $tag
+            git switch --detach $tag
             generate_docs $tag
           done
         fi
-        git checkout ${{ env.devel-branch }}
+        git switch ${{ env.devel-branch }}
 
     - name: "CNAME"
       run: |
