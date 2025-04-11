@@ -107,7 +107,7 @@ jobs:
     - name: Create symlinks for all items in /stable to /
       if: env.deploy_subdir != ${{ env.devel-deploy-subdir }}
       run: |
-        # Create symlink from /stable to lastest version
+        # Create contents from /stable to lastest version
         cd ${{ env.base-deploy-dir }}
         latest_tag=$(ls -d v*.* 2>/dev/null | sort -V | tail -n 1)
         cd -
@@ -115,14 +115,12 @@ jobs:
           echo "no release document build found"
         else
           echo "latest_tag: $latest_tag"
-          rm -f ${{ env.base-deploy-dir }}/stable
-          #ln -s `realpath ${{ env.base-deploy-dir }}/$latest_tag` ${{ env.base-deploy-dir }}/stable
+          rm -r -f ${{ env.base-deploy-dir }}/stable
+          cp -r ${{ env.base-deploy-dir }}/$latest_tag ${{ env.base-deploy-dir }}/stable
 
           # Re-create / items from /stable
-          find ${{ env.base-deploy-dir }} -maxdepth 1 -type l -exec rm -f {} \;
-          for item in "${{ env.base-deploy-dir }}/$latest_tag/*"; do
-            ln -s "$item" ${{ env.base-deploy-dir }}/;
-          done
+          #find ${{ env.base-deploy-dir }} -maxdepth 1 -type l -exec rm -f {} \;
+          cp -r ${{ env.base-deploy-dir }}/stable/* ${{ env.base-deploy-dir }}
         fi
     - name: Upload artifact
       uses: actions/upload-pages-artifact@v3
