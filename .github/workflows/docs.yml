@@ -51,13 +51,18 @@ jobs:
         all_tags=$(git tag -l 'v*.*'|sort -V)
 
         # List all existing directories in the deploy directory
-        cd ${{ env.base-deploy-dir }}
-        existing_dirs=$(for dir in v*.*; do
-          if [ -d $dir -a "$(cat $dir/COMMIT 2>/dev/null)" = "$(git rev-list -n 1 $dir)" ];then
-            echo "$dir";
-          fi
-        done | sort -V)
-        cd -
+        if [ -d ${{ env.base-deploy-dir }} ]; then
+          cd ${{ env.base-deploy-dir }}
+          existing_dirs=$(for dir in v*.*; do
+            if [ -d $dir -a "$(cat $dir/COMMIT 2>/dev/null)" = "$(git rev-list -n 1 $dir)" ];then
+              echo "$dir";
+            fi
+          done | sort -V)
+          cd -
+        else
+          mkdir -p ${{ env.base-deploy-dir }}
+          existing_dirs=""
+        fi
 
         # Find tags that don't have corresponding directories by comparing sorted lists of tags and directories
         unbuilt_tags=$(comm -23 <(echo "$all_tags") <(echo "$existing_dirs"))
