@@ -36,8 +36,9 @@ jobs:
       run: |
         # Define a reusable function for generating documentation
         generate_docs() {
-          local git_url_arg="--git.url:https://github.com/${{ github.repository }} --git.commit:${{ env.devel-branch }}"
           local subdir=$1
+          local tag=$2
+          local git_url_arg="--git.url:https://github.com/${{ github.repository }} --git.commit:$tag"
           echo "Generating documentation for $subdir"
           rm -rf "${{ env.base-deploy-dir }}/$subdir"
           local deploy_dir=${{ env.base-deploy-dir }}/$subdir
@@ -81,13 +82,13 @@ jobs:
           done
         fi
 
-        generate_docs ${{ env.devel-deploy-subdir }}
+        generate_docs ${{ env.devel-deploy-subdir }} ${{ env.devel-branch }}
         # Generate documentation for unbuilt tags
         if [ -n "$unbuilt_tags" ]; then
           echo "Generating documentation for unbuilt tags: $unbuilt_tags"
           for tag in $unbuilt_tags; do
             git switch --detach $tag
-            generate_docs $tag
+            generate_docs $tag $tag
           done
         fi
         git switch ${{ env.devel-branch }}
