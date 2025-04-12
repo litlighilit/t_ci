@@ -53,7 +53,7 @@ jobs:
         generate_docs() {
           local subdir=$1
           local tag=$2
-          local git_url_arg="--git.url:https://github.com/${{ github.repository }} --git.commit:$tag"
+          local git_url_arg="--git.url:https://github.com/${{ github.repository }} --git.commit:$tag --git.devel:${{ env.devel-branch }}"
           echo "Generating documentation for $subdir"
           rm -rf "${{ env.base-deploy-dir }}/$subdir"
           local deploy_dir=${{ env.base-deploy-dir }}/$subdir
