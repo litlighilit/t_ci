@@ -17,9 +17,6 @@ jobs:
   build-docs:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-      with:
-        fetch-depth: 0 # Fetch all history for all branches and tags
     - name: Cache nimble
       id: cache-nimble
       uses: actions/cache@v4
@@ -28,6 +25,24 @@ jobs:
           key: ${{ runner.os }}-nimble-v2-${{ hashFiles('*.nimble') }}
           restore-keys: |
             ${{ runner.os }}-nimble-v2-
+    - name: Cache Git repository
+      uses: actions/cache@v4
+      with:
+        path: ${{ github.workspace }}/.git
+        key: ${{ runner.os }}-git-cache-${{ github.repository }}-${{ github.sha }}
+        restore-keys: |
+          ${{ runner.os }}-git-cache-${{ github.repository }}-
+
+    - name: Checkout repository
+      run: |
+        if [ -d .git ]; then
+          echo "Restoring Git repository from cache"
+        else
+          echo "Cloning repository"
+          git clone --no-checkout https://github.com/${{ github.repository }} .
+        fi
+        git fetch -f --all --tags --prune
+        git reset --hard origin/${{ env.devel-branch }} # ${{ github.sha }}
     - uses: jiro4989/setup-nim-action@v2
       with:
         nim-version: ${{ env.nim-version }}
@@ -105,6 +120,12 @@ jobs:
         # Dynamically generate the CNAME file to configure a custom domain for GitHub Pages.
         # This ensures the domain matches the repository's homepage URL, allowing proper redirection.
         # We generate CNAME here to use ${{ github.event.repository.homepage }}
+    - name: Cache releases
+      id: cache-releases
+      uses: actions/cache@v4
+      with:
+          path: ${{ env.base-deploy-dir }}
+          key: releases-docs-${{ github.event.repository.name }}
     - name: Create symlinks for all items in /stable to /
       if: env.deploy_subdir != ${{ env.devel-deploy-subdir }}
       run: |
